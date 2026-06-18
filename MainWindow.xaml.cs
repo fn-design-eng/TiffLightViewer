@@ -368,8 +368,7 @@ public partial class MainWindow : Window
 
         var current = e.GetPosition(ImageScrollViewer);
         var delta = current - _panStart;
-        ImageScrollViewer.ScrollToHorizontalOffset(_panStartHorizontalOffset - delta.X);
-        ImageScrollViewer.ScrollToVerticalOffset(_panStartVerticalOffset - delta.Y);
+        ScrollToClampedOffset(_panStartHorizontalOffset - delta.X, _panStartVerticalOffset - delta.Y);
         e.Handled = true;
     }
 
@@ -480,8 +479,7 @@ public partial class MainWindow : Window
         ApplyZoom();
         ImageScrollViewer.UpdateLayout();
 
-        ImageScrollViewer.ScrollToHorizontalOffset((normalizedX * _zoom) - viewportPoint.X);
-        ImageScrollViewer.ScrollToVerticalOffset((normalizedY * _zoom) - viewportPoint.Y);
+        ScrollToClampedOffset((normalizedX * _zoom) - viewportPoint.X, (normalizedY * _zoom) - viewportPoint.Y);
     }
 
     private void ApplyZoom()
@@ -537,8 +535,8 @@ public partial class MainWindow : Window
 
         var viewportWidth = Math.Max(1, ImageScrollViewer.ViewportWidth);
         var viewportHeight = Math.Max(1, ImageScrollViewer.ViewportHeight);
-        ImageHost.Width = Math.Max(viewportWidth, (width * _zoom) + 48);
-        ImageHost.Height = Math.Max(viewportHeight, (height * _zoom) + 48);
+        ImageHost.Width = Math.Max(viewportWidth, width * _zoom);
+        ImageHost.Height = Math.Max(viewportHeight, height * _zoom);
     }
 
     private double CalculateFitZoom(BitmapSource source)
@@ -592,8 +590,13 @@ public partial class MainWindow : Window
     private void ResetScrollToCenter()
     {
         ImageScrollViewer.UpdateLayout();
-        ImageScrollViewer.ScrollToHorizontalOffset(ImageScrollViewer.ScrollableWidth / 2);
-        ImageScrollViewer.ScrollToVerticalOffset(ImageScrollViewer.ScrollableHeight / 2);
+        ScrollToClampedOffset(ImageScrollViewer.ScrollableWidth / 2, ImageScrollViewer.ScrollableHeight / 2);
+    }
+
+    private void ScrollToClampedOffset(double horizontalOffset, double verticalOffset)
+    {
+        ImageScrollViewer.ScrollToHorizontalOffset(Math.Clamp(horizontalOffset, 0, ImageScrollViewer.ScrollableWidth));
+        ImageScrollViewer.ScrollToVerticalOffset(Math.Clamp(verticalOffset, 0, ImageScrollViewer.ScrollableHeight));
     }
 
     private void StopPanning()
