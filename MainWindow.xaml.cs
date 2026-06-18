@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 
@@ -30,13 +31,30 @@ public partial class MainWindow : Window
         _initialPath = initialPath;
         InitializeComponent();
         Loaded += MainWindow_Loaded;
+        Closed += MainWindow_Closed;
+        SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
+        ApplySystemTheme();
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        ApplySystemTheme();
         if (!string.IsNullOrWhiteSpace(_initialPath))
         {
             await OpenPathAsync(_initialPath);
+        }
+    }
+
+    private void MainWindow_Closed(object? sender, EventArgs e)
+    {
+        SystemEvents.UserPreferenceChanged -= SystemEvents_UserPreferenceChanged;
+    }
+
+    private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.VisualStyle)
+        {
+            Dispatcher.Invoke(ApplySystemTheme);
         }
     }
 
@@ -241,11 +259,26 @@ public partial class MainWindow : Window
         ResetScrollToCenter();
     }
 
-    private void Rotate_Click(object sender, RoutedEventArgs e)
+    private void RotateLeft_Click(object sender, RoutedEventArgs e)
     {
-        _rotation = (_rotation + 90) % 360;
+        RotateBy(-90);
+    }
+
+    private void RotateRight_Click(object sender, RoutedEventArgs e)
+    {
+        RotateBy(90);
+    }
+
+    private void RotateBy(int degrees)
+    {
+        _rotation = (_rotation + degrees + 360) % 360;
         ImageRotateTransform.Angle = _rotation;
         if (_fitToWindow)
+        {
+            ApplyZoom();
+            ResetScrollToCenter();
+        }
+        else
         {
             ApplyZoom();
         }
@@ -310,6 +343,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            StopPanning();
+            return;
+        }
+
         var current = e.GetPosition(ImageScrollViewer);
         var delta = current - _panStart;
         ImageScrollViewer.ScrollToHorizontalOffset(_panStartHorizontalOffset - delta.X);
@@ -326,8 +365,15 @@ public partial class MainWindow : Window
 
     private void ImageScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        RefreshFitZoom();
         if (_fitToWindow)
         {
+            ApplyZoom();
+            ResetScrollToCenter();
+        }
+        else if (_zoom < ClampZoom(_zoom))
+        {
+            _zoom = ClampZoom(_zoom);
             ApplyZoom();
         }
     }
@@ -374,7 +420,11 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
             case Key.R:
-                Rotate_Click(sender, e);
+                RotateRight_Click(sender, e);
+                e.Handled = true;
+                break;
+            case Key.L:
+                RotateLeft_Click(sender, e);
                 e.Handled = true;
                 break;
             case Key.O when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
@@ -426,14 +476,21 @@ public partial class MainWindow : Window
         else if (ViewerImage.Source is BitmapSource fitSource)
         {
             _fitZoom = CalculateFitZoom(fitSource);
+            _zoom = ClampZoom(_zoom);
         }
 
-        ImageScaleTransform.ScaleX = _zoom;
-        ImageScaleTransform.ScaleY = _zoom;
         UpdateImageHostSize();
         ImageScrollViewer.UpdateLayout();
         ZoomText.Text = $"{_zoom:P0}";
         UpdatePanCursor();
+    }
+
+    private void RefreshFitZoom()
+    {
+        if (ViewerImage.Source is BitmapSource source)
+        {
+            _fitZoom = CalculateFitZoom(source);
+        }
     }
 
     private double ClampZoom(double value)
@@ -453,6 +510,8 @@ public partial class MainWindow : Window
 
         var width = source.Width;
         var height = source.Height;
+        ViewerImage.Width = source.Width * _zoom;
+        ViewerImage.Height = source.Height * _zoom;
         if (_rotation is 90 or 270)
         {
             (width, height) = (height, width);
@@ -495,8 +554,7 @@ public partial class MainWindow : Window
             return false;
         }
 
-        return _zoom > _fitZoom * 1.01
-            && (ImageScrollViewer.ScrollableWidth > 0 || ImageScrollViewer.ScrollableHeight > 0);
+        return _zoom > _fitZoom * 1.01;
     }
 
     private void UpdatePanCursor()
@@ -562,5 +620,47 @@ public partial class MainWindow : Window
         }
 
         return paths.FirstOrDefault(DataClasysFileService.IsTiffExtension);
+    }
+
+    private void ApplySystemTheme()
+    {
+        if (IsWindowsAppLightTheme())
+        {
+            SetBrush("WindowBackgroundBrush", "#EAF1F8");
+            SetBrush("ChromeBackgroundBrush", "#DCEAF7");
+            SetBrush("ChromeBorderBrush", "#B7CADC");
+            SetBrush("ToolbarBackgroundBrush", "#F9FBFD");
+            SetBrush("ToolbarButtonBrush", "#F8FBFF");
+            SetBrush("ToolbarButtonPrimaryBrush", "#DCEEFF");
+            SetBrush("ToolbarButtonBorderBrush", "#8CAFD1");
+            SetBrush("TextBrush", "#24394A");
+            SetBrush("MutedTextBrush", "#64788A");
+            SetBrush("SeparatorBrush", "#CCD8E3");
+        }
+        else
+        {
+            SetBrush("WindowBackgroundBrush", "#20252B");
+            SetBrush("ChromeBackgroundBrush", "#2B333B");
+            SetBrush("ChromeBorderBrush", "#3F4B56");
+            SetBrush("ToolbarBackgroundBrush", "#252C33");
+            SetBrush("ToolbarButtonBrush", "#303943");
+            SetBrush("ToolbarButtonPrimaryBrush", "#304A63");
+            SetBrush("ToolbarButtonBorderBrush", "#5D7488");
+            SetBrush("TextBrush", "#E8EEF4");
+            SetBrush("MutedTextBrush", "#A9B8C5");
+            SetBrush("SeparatorBrush", "#53616D");
+        }
+    }
+
+    private void SetBrush(string key, string color)
+    {
+        Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+    }
+
+    private static bool IsWindowsAppLightTheme()
+    {
+        const string registryPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        using var key = Registry.CurrentUser.OpenSubKey(registryPath);
+        return key?.GetValue("AppsUseLightTheme") is not int value || value != 0;
     }
 }
