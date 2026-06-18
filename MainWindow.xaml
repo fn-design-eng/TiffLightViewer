@@ -9,81 +9,83 @@
         MinHeight="420"
         MinWidth="620"
         Width="1120"
-        Background="#1F1F1F"
+        Background="#EAF1F8"
+        AllowDrop="True"
+        DragOver="Window_DragOver"
+        Drop="Window_Drop"
         KeyDown="Window_KeyDown">
     <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="MinWidth" Value="36" />
-            <Setter Property="Height" Value="34" />
-            <Setter Property="Margin" Value="2" />
-            <Setter Property="Padding" Value="10,0" />
-            <Setter Property="Background" Value="#333333" />
-            <Setter Property="Foreground" Value="#F4F4F4" />
-            <Setter Property="BorderBrush" Value="#565656" />
+        <Style x:Key="MenuButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="58" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#1F405E" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="12" />
         </Style>
+
+        <Style x:Key="ViewerToolButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Margin" Value="1" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="#F8FBFF" />
+            <Setter Property="Foreground" Value="#1F5F9B" />
+            <Setter Property="BorderBrush" Value="#8CAFD1" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="PrimaryToolButtonStyle" TargetType="Button" BasedOn="{StaticResource ViewerToolButtonStyle}">
+            <Setter Property="Width" Value="42" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Background" Value="#DCEEFF" />
+            <Setter Property="BorderBrush" Value="#5E92C5" />
+            <Setter Property="FontSize" Value="18" />
+        </Style>
+
         <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#E8E8E8" />
+            <Setter Property="Foreground" Value="#24394A" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </Window.Resources>
 
-    <DockPanel>
-        <Border DockPanel.Dock="Top" Background="#252525" BorderBrush="#3B3B3B" BorderThickness="0,0,0,1">
-            <Grid Margin="8,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="28" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="24" />
+        </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal">
-                    <Button Content="開く" Click="Open_Click" ToolTip="TIFFファイルを開く" />
-                    <Button Content="前" Click="PreviousFile_Click" ToolTip="同じフォルダの前のTIFF" />
-                    <Button Content="次" Click="NextFile_Click" ToolTip="同じフォルダの次のTIFF" />
-                    <Button Content="-" Click="ZoomOut_Click" ToolTip="縮小" />
-                    <Button Content="+" Click="ZoomIn_Click" ToolTip="拡大" />
-                    <Button Content="実寸" Click="ActualSize_Click" ToolTip="100%表示" />
-                    <Button Content="合わせる" Click="Fit_Click" ToolTip="ウィンドウに合わせる" />
-                    <Button Content="回転" Click="Rotate_Click" ToolTip="右へ90度回転" />
-                    <Button Content="ペイント" Click="OpenInPaint_Click" ToolTip="元ファイルをペイントで開く" />
+        <Border Grid.Row="0" Background="#DCEAF7" BorderBrush="#B7CADC" BorderThickness="0,0,0,1">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,0,0">
+                    <Button Content="ファイル" Click="Open_Click" Style="{StaticResource MenuButtonStyle}" ToolTip="TIFFファイルを開く" />
+                    <Button Content="ペイント" Click="OpenInPaint_Click" Style="{StaticResource MenuButtonStyle}" ToolTip="元ファイルをペイントで開く" />
+                    <Button Content="合わせる" Click="Fit_Click" Style="{StaticResource MenuButtonStyle}" ToolTip="ウィンドウに合わせる" />
                 </StackPanel>
-
                 <TextBlock x:Name="TitleText"
-                           Grid.Column="1"
-                           Margin="12,0"
+                           Margin="220,0,12,0"
                            Text="TIFFファイルを開いてください"
+                           TextAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
-
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Button Content="ページ前" Click="PreviousPage_Click" ToolTip="前のページ" />
-                    <TextBlock x:Name="PageText" Margin="8,0" Text="-" />
-                    <Button Content="ページ次" Click="NextPage_Click" ToolTip="次のページ" />
-                </StackPanel>
             </Grid>
         </Border>
 
-        <Border DockPanel.Dock="Bottom" Background="#252525" BorderBrush="#3B3B3B" BorderThickness="0,1,0,0">
-            <Grid Margin="10,5">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="StatusText" Text="準備完了" TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="ZoomText" Grid.Column="1" Margin="12,0,0,0" Text="-" />
-            </Grid>
-        </Border>
-
-        <Grid Background="#1F1F1F">
+        <Grid Grid.Row="1" Background="#EAF1F8">
             <ScrollViewer x:Name="ImageScrollViewer"
-                          Background="#1F1F1F"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
+                          Background="#EAF1F8"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Hidden"
                           PreviewMouseWheel="ImageScrollViewer_PreviewMouseWheel"
                           MouseLeftButtonDown="ImageScrollViewer_MouseLeftButtonDown"
                           MouseLeftButtonUp="ImageScrollViewer_MouseLeftButtonUp"
                           MouseMove="ImageScrollViewer_MouseMove"
+                          MouseLeave="ImageScrollViewer_MouseLeave"
                           SizeChanged="ImageScrollViewer_SizeChanged">
                 <Grid x:Name="ImageHost"
                       MinWidth="{Binding ElementName=ImageScrollViewer, Path=ViewportWidth}"
@@ -101,13 +103,49 @@
                         </Image.LayoutTransform>
                     </Image>
                     <TextBlock x:Name="EmptyText"
-                               Text="TIFFファイルを開いてください"
-                               FontSize="22"
-                               Foreground="#BEBEBE"
+                               Text="TIFFファイルを開くか、ここへドラッグしてください"
+                               FontSize="20"
+                               Foreground="#64788A"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center" />
                 </Grid>
             </ScrollViewer>
+
+            <Border x:Name="BottomToolbar"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,14"
+                    Padding="8,4"
+                    Background="#F9FBFD"
+                    BorderBrush="#B8C9D8"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="-" Click="ZoomOut_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="縮小" />
+                    <TextBlock x:Name="ZoomText" Width="48" Text="-" TextAlignment="Center" FontSize="12" />
+                    <Button Content="+" Click="ZoomIn_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="拡大" />
+                    <Rectangle Width="1" Height="20" Fill="#CCD8E3" Margin="5,0" />
+                    <Button Content="|◀" Click="PreviousFile_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="前のTIFF" />
+                    <Button Content="□" Click="FitToggle_Click" Style="{StaticResource PrimaryToolButtonStyle}" ToolTip="ウィンドウに合わせる / 実寸" />
+                    <Button Content="▶|" Click="NextFile_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="次のTIFF" />
+                    <Rectangle Width="1" Height="20" Fill="#CCD8E3" Margin="5,0" />
+                    <Button Content="‹" Click="PreviousPage_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="前のページ" />
+                    <TextBlock x:Name="PageText" Width="58" Text="-" TextAlignment="Center" FontSize="12" />
+                    <Button Content="›" Click="NextPage_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="次のページ" />
+                    <Rectangle Width="1" Height="20" Fill="#CCD8E3" Margin="5,0" />
+                    <Button Content="↻" Click="Rotate_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="右へ90度回転" />
+                    <Button Content="P" Click="OpenInPaint_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="元ファイルをペイントで開く" />
+                </StackPanel>
+            </Border>
         </Grid>
-    </DockPanel>
+
+        <Border Grid.Row="2" Background="#F7FAFD" BorderBrush="#CBD9E5" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StatusText"
+                       Margin="8,0"
+                       Text="準備完了"
+                       FontSize="12"
+                       Foreground="#43596B"
+                       TextTrimming="CharacterEllipsis" />
+        </Border>
+    </Grid>
 </Window>

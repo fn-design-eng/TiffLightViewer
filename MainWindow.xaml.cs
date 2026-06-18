@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private int _pageIndex;
     private int _rotation;
     private double _zoom = 1.0;
+    private double _fitZoom = 1.0;
     private bool _fitToWindow = true;
     private bool _isPanning;
     private Point _panStart;
@@ -79,6 +80,7 @@ public partial class MainWindow : Window
             _pageIndex = 0;
             _rotation = 0;
             _fitToWindow = true;
+            ImageRotateTransform.Angle = 0;
             RefreshFolderList(prepared.OriginalPath);
             ShowCurrentPage();
 
@@ -127,6 +129,7 @@ public partial class MainWindow : Window
         ViewerImage.Source = _pages[_pageIndex];
         PageText.Text = $"{_pageIndex + 1} / {_pages.Count}";
         ApplyZoom();
+        UpdatePanCursor();
     }
 
     private void RefreshFolderList(string path)
@@ -222,6 +225,20 @@ public partial class MainWindow : Window
     {
         _fitToWindow = true;
         ApplyZoom();
+        ResetScrollToCenter();
+    }
+
+    private void FitToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_fitToWindow)
+        {
+            SetCustomZoom(1.0);
+            return;
+        }
+
+        _fitToWindow = true;
+        ApplyZoom();
+        ResetScrollToCenter();
     }
 
     private void Rotate_Click(object sender, RoutedEventArgs e)
@@ -260,20 +277,14 @@ public partial class MainWindow : Window
 
     private void ImageScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
-        {
-            SetCustomZoom(e.Delta > 0 ? _zoom * 1.15 : _zoom / 1.15);
-            e.Handled = true;
-            return;
-        }
-
-        ChangePage(e.Delta > 0 ? -1 : 1);
+        var mousePosition = e.GetPosition(ImageScrollViewer);
+        ZoomAt(mousePosition, e.Delta > 0 ? _zoom * 1.15 : _zoom / 1.15);
         e.Handled = true;
     }
 
     private void ImageScrollViewer_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (ViewerImage.Source is null)
+        if (!CanPan())
         {
             return;
         }
@@ -283,7 +294,7 @@ public partial class MainWindow : Window
         _panStartHorizontalOffset = ImageScrollViewer.HorizontalOffset;
         _panStartVerticalOffset = ImageScrollViewer.VerticalOffset;
         ImageScrollViewer.CaptureMouse();
-        Cursor = Cursors.SizeAll;
+        Cursor = Cursors.Hand;
     }
 
     private void ImageScrollViewer_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -302,6 +313,14 @@ public partial class MainWindow : Window
         var delta = current - _panStart;
         ImageScrollViewer.ScrollToHorizontalOffset(_panStartHorizontalOffset - delta.X);
         ImageScrollViewer.ScrollToVerticalOffset(_panStartVerticalOffset - delta.Y);
+    }
+
+    private void ImageScrollViewer_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (!_isPanning)
+        {
+            UpdatePanCursor();
+        }
     }
 
     private void ImageScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -350,6 +369,7 @@ public partial class MainWindow : Window
             case Key.F:
                 _fitToWindow = true;
                 ApplyZoom();
+                ResetScrollToCenter();
                 e.Handled = true;
                 break;
             case Key.R:
@@ -370,16 +390,47 @@ public partial class MainWindow : Window
         ApplyZoom();
     }
 
+    private void ZoomAt(Point viewportPoint, double newZoom)
+    {
+        if (ViewerImage.Source is null)
+        {
+            return;
+        }
+
+        var oldZoom = _zoom;
+        if (oldZoom <= 0)
+        {
+            oldZoom = 1.0;
+        }
+
+        var normalizedX = (ImageScrollViewer.HorizontalOffset + viewportPoint.X) / oldZoom;
+        var normalizedY = (ImageScrollViewer.VerticalOffset + viewportPoint.Y) / oldZoom;
+
+        _fitToWindow = false;
+        _zoom = Math.Clamp(newZoom, 0.05, 8.0);
+        ApplyZoom();
+        ImageScrollViewer.UpdateLayout();
+
+        ImageScrollViewer.ScrollToHorizontalOffset((normalizedX * _zoom) - viewportPoint.X);
+        ImageScrollViewer.ScrollToVerticalOffset((normalizedY * _zoom) - viewportPoint.Y);
+    }
+
     private void ApplyZoom()
     {
         if (ViewerImage.Source is BitmapSource source && _fitToWindow)
         {
-            _zoom = CalculateFitZoom(source);
+            _fitZoom = CalculateFitZoom(source);
+            _zoom = _fitZoom;
+        }
+        else if (ViewerImage.Source is BitmapSource fitSource)
+        {
+            _fitZoom = CalculateFitZoom(fitSource);
         }
 
         ImageScaleTransform.ScaleX = _zoom;
         ImageScaleTransform.ScaleY = _zoom;
         ZoomText.Text = $"{_zoom:P0}";
+        UpdatePanCursor();
     }
 
     private double CalculateFitZoom(BitmapSource source)
@@ -406,6 +457,35 @@ public partial class MainWindow : Window
         StatusText.Text = message;
     }
 
+    private bool CanPan()
+    {
+        if (ViewerImage.Source is null)
+        {
+            return false;
+        }
+
+        return _zoom > _fitZoom * 1.01
+            && (ImageScrollViewer.ScrollableWidth > 0 || ImageScrollViewer.ScrollableHeight > 0);
+    }
+
+    private void UpdatePanCursor()
+    {
+        if (_isPanning)
+        {
+            Cursor = Cursors.Hand;
+            return;
+        }
+
+        Cursor = CanPan() ? Cursors.Hand : Cursors.Arrow;
+    }
+
+    private void ResetScrollToCenter()
+    {
+        ImageScrollViewer.UpdateLayout();
+        ImageScrollViewer.ScrollToHorizontalOffset(ImageScrollViewer.ScrollableWidth / 2);
+        ImageScrollViewer.ScrollToVerticalOffset(ImageScrollViewer.ScrollableHeight / 2);
+    }
+
     private void StopPanning()
     {
         if (!_isPanning)
@@ -415,6 +495,41 @@ public partial class MainWindow : Window
 
         _isPanning = false;
         ImageScrollViewer.ReleaseMouseCapture();
-        Cursor = Cursors.Arrow;
+        UpdatePanCursor();
+    }
+
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = GetDroppedTiffPath(e) is null ? DragDropEffects.None : DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private async void Window_Drop(object sender, DragEventArgs e)
+    {
+        var path = GetDroppedTiffPath(e);
+        if (path is null)
+        {
+            SetStatus("TIFFファイルをドロップしてください");
+            e.Handled = true;
+            return;
+        }
+
+        await OpenPathAsync(path);
+        e.Handled = true;
+    }
+
+    private static string? GetDroppedTiffPath(DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return null;
+        }
+
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths)
+        {
+            return null;
+        }
+
+        return paths.FirstOrDefault(DataClasysFileService.IsTiffExtension);
     }
 }
