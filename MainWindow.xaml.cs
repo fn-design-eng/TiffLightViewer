@@ -478,8 +478,8 @@ public partial class MainWindow : Window
 
     private void SetCustomZoom(double value)
     {
-        _fitToWindow = false;
         _zoom = ClampZoom(value);
+        _fitToWindow = IsFitZoom(_zoom);
         ApplyZoom();
     }
 
@@ -499,12 +499,19 @@ public partial class MainWindow : Window
         var normalizedX = (ImageScrollViewer.HorizontalOffset + viewportPoint.X) / oldZoom;
         var normalizedY = (ImageScrollViewer.VerticalOffset + viewportPoint.Y) / oldZoom;
 
-        _fitToWindow = false;
         _zoom = ClampZoom(newZoom);
+        _fitToWindow = IsFitZoom(_zoom);
         ApplyZoom();
         ImageScrollViewer.UpdateLayout();
 
-        ScrollToClampedOffset((normalizedX * _zoom) - viewportPoint.X, (normalizedY * _zoom) - viewportPoint.Y);
+        if (_fitToWindow)
+        {
+            ResetScrollToCenter();
+        }
+        else
+        {
+            ScrollToClampedOffset((normalizedX * _zoom) - viewportPoint.X, (normalizedY * _zoom) - viewportPoint.Y);
+        }
     }
 
     private void ApplyZoom()
@@ -559,6 +566,11 @@ public partial class MainWindow : Window
     {
         var minimumZoom = Math.Max(0.05, Math.Min(_fitZoom, 1.0));
         return Math.Clamp(value, minimumZoom, 8.0);
+    }
+
+    private bool IsFitZoom(double zoom)
+    {
+        return Math.Abs(zoom - _fitZoom) <= 0.0001;
     }
 
     private void UpdateImageHostSize()
