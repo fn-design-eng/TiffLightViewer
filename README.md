@@ -34,7 +34,9 @@ dotnet run -- "C:\path\to\sample.tif"
 ## 発行
 
 ```powershell
-dotnet publish -c Release
+dotnet publish -p:PublishProfile=SelfContained
+dotnet publish -p:PublishProfile=FrameworkDependent
 ```
 
-発行物は `bin\Release\net8.0-windows\win-x64\publish\` に作成されます。
+- .NET内包版: `bin\Release\net8.0-windows\win-x64\publish-self-contained\`
+- .NET Desktop Runtime 8 必須版: `bin\Release\net8.0-windows\win-x64\publish-framework-dependent\`
