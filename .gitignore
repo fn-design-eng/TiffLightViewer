@@ -1,0 +1,28 @@
+# Build outputs
+bin/
+obj/
+.vs/
+publish/
+dist/
+
+# User/local IDE state
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# DataClasys decrypted workspace/cache artifacts
+Workspaces/
+workspaces/
+workspace/
+cache/
+decrypted/
+*.decrypted.tif
+*.decrypted.tiff
+*.uploading
+*.dcl.lock
