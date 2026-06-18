@@ -140,9 +140,19 @@
                     <TextBlock x:Name="ZoomText" Width="48" Text="-" TextAlignment="Center" FontSize="12" />
                     <Button Content="+" Click="ZoomIn_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="拡大" />
                     <Rectangle Width="1" Height="20" Fill="{DynamicResource SeparatorBrush}" Margin="5,0" />
-                    <Button Content="|◀" Click="PreviousFile_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="前のTIFF" />
+                    <Button Click="PreviousFile_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="前のTIFF">
+                        <Grid Width="18" Height="16">
+                            <Rectangle Width="2" Height="14" HorizontalAlignment="Left" Fill="{DynamicResource TextBrush}" />
+                            <Path Data="M 15,2 L 5,8 L 15,14 Z" Fill="{DynamicResource TextBrush}" />
+                        </Grid>
+                    </Button>
                     <Button Content="□" Click="FitToggle_Click" Style="{StaticResource PrimaryToolButtonStyle}" ToolTip="ウィンドウに合わせる / 実寸" />
-                    <Button Content="▶|" Click="NextFile_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="次のTIFF" />
+                    <Button Click="NextFile_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="次のTIFF">
+                        <Grid Width="18" Height="16">
+                            <Path Data="M 3,2 L 13,8 L 3,14 Z" Fill="{DynamicResource TextBrush}" />
+                            <Rectangle Width="2" Height="14" HorizontalAlignment="Right" Fill="{DynamicResource TextBrush}" />
+                        </Grid>
+                    </Button>
                     <Rectangle Width="1" Height="20" Fill="{DynamicResource SeparatorBrush}" Margin="5,0" />
                     <Button Content="‹" Click="PreviousPage_Click" Style="{StaticResource ViewerToolButtonStyle}" ToolTip="前のページ" />
                     <TextBlock x:Name="PageText" Width="58" Text="-" TextAlignment="Center" FontSize="12" />
