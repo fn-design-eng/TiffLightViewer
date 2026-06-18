@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
 
 namespace TiffLightViewer;
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
     private double _zoom = 1.0;
     private double _fitZoom = 1.0;
     private bool _fitToWindow = true;
+    private bool _fitRefreshQueued;
     private bool _isPanning;
     private Point _panStart;
     private double _panStartHorizontalOffset;
@@ -399,16 +401,22 @@ public partial class MainWindow : Window
 
     private void ImageScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        RefreshFitZoom();
         if (_fitToWindow)
         {
-            ApplyZoom();
-            ResetScrollToCenter();
+            QueueFitToWindowRefresh();
         }
         else if (_zoom < ClampZoom(_zoom))
         {
             _zoom = ClampZoom(_zoom);
             ApplyZoom();
+        }
+    }
+
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_fitToWindow)
+        {
+            QueueFitToWindowRefresh();
         }
     }
 
@@ -524,6 +532,27 @@ public partial class MainWindow : Window
         {
             _fitZoom = CalculateFitZoom(_currentPage);
         }
+    }
+
+    private void QueueFitToWindowRefresh()
+    {
+        if (_fitRefreshQueued || _currentPage is null)
+        {
+            return;
+        }
+
+        _fitRefreshQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _fitRefreshQueued = false;
+            if (!_fitToWindow || _currentPage is null)
+            {
+                return;
+            }
+
+            ApplyZoom();
+            ResetScrollToCenter();
+        }, DispatcherPriority.Loaded);
     }
 
     private double ClampZoom(double value)

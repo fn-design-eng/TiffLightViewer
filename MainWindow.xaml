@@ -12,7 +12,8 @@
         AllowDrop="True"
         DragOver="Window_DragOver"
         Drop="Window_Drop"
-        KeyDown="Window_KeyDown">
+        KeyDown="Window_KeyDown"
+        SizeChanged="Window_SizeChanged">
     <Window.Resources>
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#EAF1F8" />
         <SolidColorBrush x:Key="ChromeBackgroundBrush" Color="#DCEAF7" />
