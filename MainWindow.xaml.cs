@@ -208,12 +208,12 @@ public partial class MainWindow : Window
 
     private void ZoomOut_Click(object sender, RoutedEventArgs e)
     {
-        SetCustomZoom(_zoom / 1.25);
+        SetCustomZoom(ClampZoom(_zoom / 1.25));
     }
 
     private void ZoomIn_Click(object sender, RoutedEventArgs e)
     {
-        SetCustomZoom(_zoom * 1.25);
+        SetCustomZoom(ClampZoom(_zoom * 1.25));
     }
 
     private void ActualSize_Click(object sender, RoutedEventArgs e)
@@ -284,6 +284,7 @@ public partial class MainWindow : Window
 
     private void ImageScrollViewer_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        ImageScrollViewer.UpdateLayout();
         if (!CanPan())
         {
             return;
@@ -353,12 +354,12 @@ public partial class MainWindow : Window
                 break;
             case Key.Add:
             case Key.OemPlus:
-                SetCustomZoom(_zoom * 1.25);
+                SetCustomZoom(ClampZoom(_zoom * 1.25));
                 e.Handled = true;
                 break;
             case Key.Subtract:
             case Key.OemMinus:
-                SetCustomZoom(_zoom / 1.25);
+                SetCustomZoom(ClampZoom(_zoom / 1.25));
                 e.Handled = true;
                 break;
             case Key.D1:
@@ -386,7 +387,7 @@ public partial class MainWindow : Window
     private void SetCustomZoom(double value)
     {
         _fitToWindow = false;
-        _zoom = Math.Clamp(value, 0.05, 8.0);
+        _zoom = ClampZoom(value);
         ApplyZoom();
     }
 
@@ -407,7 +408,7 @@ public partial class MainWindow : Window
         var normalizedY = (ImageScrollViewer.VerticalOffset + viewportPoint.Y) / oldZoom;
 
         _fitToWindow = false;
-        _zoom = Math.Clamp(newZoom, 0.05, 8.0);
+        _zoom = ClampZoom(newZoom);
         ApplyZoom();
         ImageScrollViewer.UpdateLayout();
 
@@ -429,8 +430,38 @@ public partial class MainWindow : Window
 
         ImageScaleTransform.ScaleX = _zoom;
         ImageScaleTransform.ScaleY = _zoom;
+        UpdateImageHostSize();
+        ImageScrollViewer.UpdateLayout();
         ZoomText.Text = $"{_zoom:P0}";
         UpdatePanCursor();
+    }
+
+    private double ClampZoom(double value)
+    {
+        var minimumZoom = Math.Max(0.05, Math.Min(_fitZoom, 1.0));
+        return Math.Clamp(value, minimumZoom, 8.0);
+    }
+
+    private void UpdateImageHostSize()
+    {
+        if (ViewerImage.Source is not BitmapSource source)
+        {
+            ImageHost.Width = double.NaN;
+            ImageHost.Height = double.NaN;
+            return;
+        }
+
+        var width = source.Width;
+        var height = source.Height;
+        if (_rotation is 90 or 270)
+        {
+            (width, height) = (height, width);
+        }
+
+        var viewportWidth = Math.Max(1, ImageScrollViewer.ViewportWidth);
+        var viewportHeight = Math.Max(1, ImageScrollViewer.ViewportHeight);
+        ImageHost.Width = Math.Max(viewportWidth, (width * _zoom) + 48);
+        ImageHost.Height = Math.Max(viewportHeight, (height * _zoom) + 48);
     }
 
     private double CalculateFitZoom(BitmapSource source)
@@ -449,7 +480,7 @@ public partial class MainWindow : Window
             return 1.0;
         }
 
-        return Math.Clamp(Math.Min(viewportWidth / width, viewportHeight / height), 0.05, 8.0);
+        return Math.Clamp(Math.Min(viewportWidth / width, viewportHeight / height), 0.05, 1.0);
     }
 
     private void SetStatus(string message)
