@@ -327,13 +327,16 @@ public partial class MainWindow : Window
         _panStart = e.GetPosition(ImageScrollViewer);
         _panStartHorizontalOffset = ImageScrollViewer.HorizontalOffset;
         _panStartVerticalOffset = ImageScrollViewer.VerticalOffset;
-        ImageScrollViewer.CaptureMouse();
-        Cursor = Cursors.Hand;
+        Mouse.Capture(ImageScrollViewer, CaptureMode.SubTree);
+        ImageScrollViewer.Cursor = Cursors.SizeAll;
+        Cursor = Cursors.SizeAll;
+        e.Handled = true;
     }
 
     private void ImageScrollViewer_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         StopPanning();
+        e.Handled = true;
     }
 
     private void ImageScrollViewer_MouseMove(object sender, MouseEventArgs e)
@@ -353,6 +356,7 @@ public partial class MainWindow : Window
         var delta = current - _panStart;
         ImageScrollViewer.ScrollToHorizontalOffset(_panStartHorizontalOffset - delta.X);
         ImageScrollViewer.ScrollToVerticalOffset(_panStartVerticalOffset - delta.Y);
+        e.Handled = true;
     }
 
     private void ImageScrollViewer_MouseLeave(object sender, MouseEventArgs e)
@@ -561,11 +565,14 @@ public partial class MainWindow : Window
     {
         if (_isPanning)
         {
-            Cursor = Cursors.Hand;
+            ImageScrollViewer.Cursor = Cursors.SizeAll;
+            Cursor = Cursors.SizeAll;
             return;
         }
 
-        Cursor = CanPan() ? Cursors.Hand : Cursors.Arrow;
+        var cursor = CanPan() ? Cursors.Hand : Cursors.Arrow;
+        ImageScrollViewer.Cursor = cursor;
+        Cursor = cursor;
     }
 
     private void ResetScrollToCenter()
@@ -583,7 +590,11 @@ public partial class MainWindow : Window
         }
 
         _isPanning = false;
-        ImageScrollViewer.ReleaseMouseCapture();
+        if (Mouse.Captured == ImageScrollViewer)
+        {
+            Mouse.Capture(null);
+        }
+
         UpdatePanCursor();
     }
 
