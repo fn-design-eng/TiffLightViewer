@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -10,6 +12,8 @@ namespace TiffLightViewer;
 
 public partial class MainWindow : Window
 {
+    private const int DwmwaUseImmersiveDarkMode = 20;
+    private const int DwmwaUseImmersiveDarkModeBefore20h1 = 19;
     private readonly DataClasysFileService _fileService;
     private readonly string? _initialPath;
     private readonly List<BitmapSource> _pages = [];
@@ -30,6 +34,7 @@ public partial class MainWindow : Window
         _fileService = fileService;
         _initialPath = initialPath;
         InitializeComponent();
+        SourceInitialized += MainWindow_SourceInitialized;
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
         SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
@@ -50,11 +55,20 @@ public partial class MainWindow : Window
         SystemEvents.UserPreferenceChanged -= SystemEvents_UserPreferenceChanged;
     }
 
+    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+    {
+        ApplyTitleBarTheme();
+    }
+
     private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
         if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.VisualStyle)
         {
-            Dispatcher.Invoke(ApplySystemTheme);
+            Dispatcher.Invoke(() =>
+            {
+                ApplySystemTheme();
+                ApplyTitleBarTheme();
+            });
         }
     }
 
@@ -635,7 +649,10 @@ public partial class MainWindow : Window
 
     private void ApplySystemTheme()
     {
-        if (IsWindowsAppLightTheme())
+        var useLightTheme = IsWindowsAppLightTheme();
+        ApplyTitleBarTheme(!useLightTheme);
+
+        if (useLightTheme)
         {
             SetBrush("WindowBackgroundBrush", "#EAF1F8");
             SetBrush("ChromeBackgroundBrush", "#DCEAF7");
@@ -663,6 +680,26 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ApplyTitleBarTheme()
+    {
+        ApplyTitleBarTheme(!IsWindowsAppLightTheme());
+    }
+
+    private void ApplyTitleBarTheme(bool useDarkTitleBar)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var value = useDarkTitleBar ? 1 : 0;
+        if (DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref value, sizeof(int)) != 0)
+        {
+            _ = DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkModeBefore20h1, ref value, sizeof(int));
+        }
+    }
+
     private void SetBrush(string key, string color)
     {
         Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
@@ -674,4 +711,11 @@ public partial class MainWindow : Window
         using var key = Registry.CurrentUser.OpenSubKey(registryPath);
         return key?.GetValue("AppsUseLightTheme") is not int value || value != 0;
     }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int dwAttribute,
+        ref int pvAttribute,
+        int cbAttribute);
 }
