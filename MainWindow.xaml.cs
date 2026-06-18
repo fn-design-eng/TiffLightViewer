@@ -1,0 +1,420 @@
+using System.Diagnostics;
+using System.IO;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
+
+namespace TiffLightViewer;
+
+public partial class MainWindow : Window
+{
+    private readonly DataClasysFileService _fileService;
+    private readonly string? _initialPath;
+    private readonly List<BitmapSource> _pages = [];
+    private readonly List<string> _folderTiffs = [];
+    private PreparedTiffFile? _currentFile;
+    private int _pageIndex;
+    private int _rotation;
+    private double _zoom = 1.0;
+    private bool _fitToWindow = true;
+    private bool _isPanning;
+    private Point _panStart;
+    private double _panStartHorizontalOffset;
+    private double _panStartVerticalOffset;
+
+    public MainWindow(DataClasysFileService fileService, string? initialPath)
+    {
+        _fileService = fileService;
+        _initialPath = initialPath;
+        InitializeComponent();
+        Loaded += MainWindow_Loaded;
+    }
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(_initialPath))
+        {
+            await OpenPathAsync(_initialPath);
+        }
+    }
+
+    private async void Open_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "TIFFファイルを開く",
+            Filter = "TIFF ファイル (*.tif;*.tiff)|*.tif;*.tiff|すべてのファイル (*.*)|*.*",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            await OpenPathAsync(dialog.FileName);
+        }
+    }
+
+    private async Task OpenPathAsync(string path)
+    {
+        try
+        {
+            SetStatus("読み込み中...");
+            IsEnabled = false;
+
+            if (!DataClasysFileService.IsTiffExtension(path))
+            {
+                throw new InvalidOperationException("TIFFファイルを選択してください。");
+            }
+
+            var prepared = await _fileService.PrepareAsync(path);
+            var loadedPages = LoadTiffPages(prepared.DisplayPath);
+            if (loadedPages.Count == 0)
+            {
+                throw new InvalidOperationException("表示できるページがありません。");
+            }
+
+            _currentFile = prepared;
+            _pages.Clear();
+            _pages.AddRange(loadedPages);
+            _pageIndex = 0;
+            _rotation = 0;
+            _fitToWindow = true;
+            RefreshFolderList(prepared.OriginalPath);
+            ShowCurrentPage();
+
+            Title = $"{Path.GetFileName(prepared.OriginalPath)} - Tiff Light Viewer";
+            TitleText.Text = prepared.OriginalPath;
+            EmptyText.Visibility = Visibility.Collapsed;
+            SetStatus($"{prepared.Mode}: {prepared.OriginalPath}");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "読み込みエラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            SetStatus("読み込みに失敗しました");
+        }
+        finally
+        {
+            IsEnabled = true;
+            Focus();
+        }
+    }
+
+    private static List<BitmapSource> LoadTiffPages(string path)
+    {
+        using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        var pages = new List<BitmapSource>(decoder.Frames.Count);
+        foreach (var frame in decoder.Frames)
+        {
+            frame.Freeze();
+            pages.Add(frame);
+        }
+
+        return pages;
+    }
+
+    private void ShowCurrentPage()
+    {
+        if (_pages.Count == 0)
+        {
+            ViewerImage.Source = null;
+            EmptyText.Visibility = Visibility.Visible;
+            PageText.Text = "-";
+            ZoomText.Text = "-";
+            return;
+        }
+
+        ViewerImage.Source = _pages[_pageIndex];
+        PageText.Text = $"{_pageIndex + 1} / {_pages.Count}";
+        ApplyZoom();
+    }
+
+    private void RefreshFolderList(string path)
+    {
+        _folderTiffs.Clear();
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        _folderTiffs.AddRange(Directory.EnumerateFiles(directory)
+            .Where(DataClasysFileService.IsTiffExtension)
+            .OrderBy(item => item, StringComparer.CurrentCultureIgnoreCase));
+    }
+
+    private async void PreviousFile_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenSiblingFileAsync(-1);
+    }
+
+    private async void NextFile_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenSiblingFileAsync(1);
+    }
+
+    private async Task OpenSiblingFileAsync(int delta)
+    {
+        if (_currentFile is null || _folderTiffs.Count == 0)
+        {
+            return;
+        }
+
+        var index = _folderTiffs.FindIndex(item =>
+            string.Equals(Path.GetFullPath(item), _currentFile.OriginalPath, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            return;
+        }
+
+        var next = index + delta;
+        if (next < 0 || next >= _folderTiffs.Count)
+        {
+            return;
+        }
+
+        await OpenPathAsync(_folderTiffs[next]);
+    }
+
+    private void PreviousPage_Click(object sender, RoutedEventArgs e)
+    {
+        ChangePage(-1);
+    }
+
+    private void NextPage_Click(object sender, RoutedEventArgs e)
+    {
+        ChangePage(1);
+    }
+
+    private void ChangePage(int delta)
+    {
+        if (_pages.Count == 0)
+        {
+            return;
+        }
+
+        var next = _pageIndex + delta;
+        if (next < 0 || next >= _pages.Count)
+        {
+            return;
+        }
+
+        _pageIndex = next;
+        ShowCurrentPage();
+    }
+
+    private void ZoomOut_Click(object sender, RoutedEventArgs e)
+    {
+        SetCustomZoom(_zoom / 1.25);
+    }
+
+    private void ZoomIn_Click(object sender, RoutedEventArgs e)
+    {
+        SetCustomZoom(_zoom * 1.25);
+    }
+
+    private void ActualSize_Click(object sender, RoutedEventArgs e)
+    {
+        SetCustomZoom(1.0);
+    }
+
+    private void Fit_Click(object sender, RoutedEventArgs e)
+    {
+        _fitToWindow = true;
+        ApplyZoom();
+    }
+
+    private void Rotate_Click(object sender, RoutedEventArgs e)
+    {
+        _rotation = (_rotation + 90) % 360;
+        ImageRotateTransform.Angle = _rotation;
+        if (_fitToWindow)
+        {
+            ApplyZoom();
+        }
+    }
+
+    private void OpenInPaint_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentFile is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "mspaint.exe",
+                UseShellExecute = true,
+            };
+            startInfo.ArgumentList.Add(_currentFile.OriginalPath);
+            Process.Start(startInfo);
+            SetStatus($"ペイントで開きました: {_currentFile.OriginalPath}");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "ペイント起動エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ImageScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            SetCustomZoom(e.Delta > 0 ? _zoom * 1.15 : _zoom / 1.15);
+            e.Handled = true;
+            return;
+        }
+
+        ChangePage(e.Delta > 0 ? -1 : 1);
+        e.Handled = true;
+    }
+
+    private void ImageScrollViewer_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ViewerImage.Source is null)
+        {
+            return;
+        }
+
+        _isPanning = true;
+        _panStart = e.GetPosition(ImageScrollViewer);
+        _panStartHorizontalOffset = ImageScrollViewer.HorizontalOffset;
+        _panStartVerticalOffset = ImageScrollViewer.VerticalOffset;
+        ImageScrollViewer.CaptureMouse();
+        Cursor = Cursors.SizeAll;
+    }
+
+    private void ImageScrollViewer_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        StopPanning();
+    }
+
+    private void ImageScrollViewer_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isPanning)
+        {
+            return;
+        }
+
+        var current = e.GetPosition(ImageScrollViewer);
+        var delta = current - _panStart;
+        ImageScrollViewer.ScrollToHorizontalOffset(_panStartHorizontalOffset - delta.X);
+        ImageScrollViewer.ScrollToVerticalOffset(_panStartVerticalOffset - delta.Y);
+    }
+
+    private void ImageScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_fitToWindow)
+        {
+            ApplyZoom();
+        }
+    }
+
+    private async void Window_KeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Left:
+                await OpenSiblingFileAsync(-1);
+                e.Handled = true;
+                break;
+            case Key.Right:
+                await OpenSiblingFileAsync(1);
+                e.Handled = true;
+                break;
+            case Key.PageUp:
+                ChangePage(-1);
+                e.Handled = true;
+                break;
+            case Key.PageDown:
+                ChangePage(1);
+                e.Handled = true;
+                break;
+            case Key.Add:
+            case Key.OemPlus:
+                SetCustomZoom(_zoom * 1.25);
+                e.Handled = true;
+                break;
+            case Key.Subtract:
+            case Key.OemMinus:
+                SetCustomZoom(_zoom / 1.25);
+                e.Handled = true;
+                break;
+            case Key.D1:
+            case Key.NumPad1:
+                SetCustomZoom(1.0);
+                e.Handled = true;
+                break;
+            case Key.F:
+                _fitToWindow = true;
+                ApplyZoom();
+                e.Handled = true;
+                break;
+            case Key.R:
+                Rotate_Click(sender, e);
+                e.Handled = true;
+                break;
+            case Key.O when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
+                Open_Click(sender, e);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void SetCustomZoom(double value)
+    {
+        _fitToWindow = false;
+        _zoom = Math.Clamp(value, 0.05, 8.0);
+        ApplyZoom();
+    }
+
+    private void ApplyZoom()
+    {
+        if (ViewerImage.Source is BitmapSource source && _fitToWindow)
+        {
+            _zoom = CalculateFitZoom(source);
+        }
+
+        ImageScaleTransform.ScaleX = _zoom;
+        ImageScaleTransform.ScaleY = _zoom;
+        ZoomText.Text = $"{_zoom:P0}";
+    }
+
+    private double CalculateFitZoom(BitmapSource source)
+    {
+        var viewportWidth = Math.Max(1, ImageScrollViewer.ViewportWidth - 24);
+        var viewportHeight = Math.Max(1, ImageScrollViewer.ViewportHeight - 24);
+        var width = source.Width;
+        var height = source.Height;
+        if (_rotation is 90 or 270)
+        {
+            (width, height) = (height, width);
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            return 1.0;
+        }
+
+        return Math.Clamp(Math.Min(viewportWidth / width, viewportHeight / height), 0.05, 8.0);
+    }
+
+    private void SetStatus(string message)
+    {
+        StatusText.Text = message;
+    }
+
+    private void StopPanning()
+    {
+        if (!_isPanning)
+        {
+            return;
+        }
+
+        _isPanning = false;
+        ImageScrollViewer.ReleaseMouseCapture();
+        Cursor = Cursors.Arrow;
+    }
+}
