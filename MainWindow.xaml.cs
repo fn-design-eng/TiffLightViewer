@@ -16,8 +16,9 @@ public partial class MainWindow : Window
     private const int DwmwaUseImmersiveDarkModeBefore20h1 = 19;
     private readonly DataClasysFileService _fileService;
     private readonly string? _initialPath;
-    private readonly List<BitmapSource> _pages = [];
     private readonly List<string> _folderTiffs = [];
+    private CancellationTokenSource? _pageLoadCts;
+    private TiffDocument? _document;
     private PreparedTiffFile? _currentFile;
     private int _pageIndex;
     private int _rotation;
@@ -53,6 +54,9 @@ public partial class MainWindow : Window
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
         SystemEvents.UserPreferenceChanged -= SystemEvents_UserPreferenceChanged;
+        _pageLoadCts?.Cancel();
+        _pageLoadCts?.Dispose();
+        _document?.Dispose();
     }
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
@@ -99,27 +103,32 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException("TIFFファイルを選択してください。");
             }
 
+            _pageLoadCts?.Cancel();
+            _pageLoadCts?.Dispose();
+            _pageLoadCts = null;
+
             var prepared = await _fileService.PrepareAsync(path);
-            var loadedPages = LoadTiffPages(prepared.DisplayPath);
-            if (loadedPages.Count == 0)
+            var document = await Task.Run(() => new TiffDocument(prepared.DisplayPath));
+            if (document.PageCount == 0)
             {
                 throw new InvalidOperationException("表示できるページがありません。");
             }
 
+            var oldDocument = _document;
             _currentFile = prepared;
-            _pages.Clear();
-            _pages.AddRange(loadedPages);
+            _document = document;
+            oldDocument?.Dispose();
             _pageIndex = 0;
             _rotation = 0;
             _fitToWindow = true;
             ImageRotateTransform.Angle = 0;
             RefreshFolderList(prepared.OriginalPath);
-            ShowCurrentPage();
 
             Title = $"{Path.GetFileName(prepared.OriginalPath)} - Tiff Light Viewer";
             TitleText.Text = prepared.OriginalPath;
             EmptyText.Visibility = Visibility.Collapsed;
             SetStatus($"{prepared.Mode}: {prepared.OriginalPath}");
+            await ShowCurrentPageAsync();
         }
         catch (Exception ex)
         {
@@ -133,23 +142,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private static List<BitmapSource> LoadTiffPages(string path)
+    private async Task ShowCurrentPageAsync()
     {
-        using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        var pages = new List<BitmapSource>(decoder.Frames.Count);
-        foreach (var frame in decoder.Frames)
-        {
-            frame.Freeze();
-            pages.Add(frame);
-        }
-
-        return pages;
-    }
-
-    private void ShowCurrentPage()
-    {
-        if (_pages.Count == 0)
+        if (_document is null || _document.PageCount == 0)
         {
             ViewerImage.Source = null;
             EmptyText.Visibility = Visibility.Visible;
@@ -158,10 +153,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        ViewerImage.Source = _pages[_pageIndex];
-        PageText.Text = $"{_pageIndex + 1} / {_pages.Count}";
-        ApplyZoom();
-        UpdatePanCursor();
+        _pageLoadCts?.Cancel();
+        _pageLoadCts?.Dispose();
+        _pageLoadCts = new CancellationTokenSource();
+        var token = _pageLoadCts.Token;
+
+        try
+        {
+            SetStatus($"ページ読み込み中... {_pageIndex + 1} / {_document.PageCount}");
+            var page = await _document.LoadPageAsync(_pageIndex, token);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            ViewerImage.Source = page;
+            PageText.Text = $"{_pageIndex + 1} / {_document.PageCount}";
+            ApplyZoom();
+            UpdatePanCursor();
+            SetStatus($"{_currentFile?.Mode}: {_currentFile?.OriginalPath}");
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private void RefreshFolderList(string path)
@@ -211,31 +225,31 @@ public partial class MainWindow : Window
         await OpenPathAsync(_folderTiffs[next]);
     }
 
-    private void PreviousPage_Click(object sender, RoutedEventArgs e)
+    private async void PreviousPage_Click(object sender, RoutedEventArgs e)
     {
-        ChangePage(-1);
+        await ChangePageAsync(-1);
     }
 
-    private void NextPage_Click(object sender, RoutedEventArgs e)
+    private async void NextPage_Click(object sender, RoutedEventArgs e)
     {
-        ChangePage(1);
+        await ChangePageAsync(1);
     }
 
-    private void ChangePage(int delta)
+    private async Task ChangePageAsync(int delta)
     {
-        if (_pages.Count == 0)
+        if (_document is null || _document.PageCount == 0)
         {
             return;
         }
 
         var next = _pageIndex + delta;
-        if (next < 0 || next >= _pages.Count)
+        if (next < 0 || next >= _document.PageCount)
         {
             return;
         }
 
         _pageIndex = next;
-        ShowCurrentPage();
+        await ShowCurrentPageAsync();
     }
 
     private void ZoomOut_Click(object sender, RoutedEventArgs e)
@@ -408,11 +422,11 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
             case Key.PageUp:
-                ChangePage(-1);
+                await ChangePageAsync(-1);
                 e.Handled = true;
                 break;
             case Key.PageDown:
-                ChangePage(1);
+                await ChangePageAsync(1);
                 e.Handled = true;
                 break;
             case Key.Add:
