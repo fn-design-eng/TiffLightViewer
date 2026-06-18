@@ -8,7 +8,7 @@ public sealed class TiffDocument : IDisposable
 {
     private const int CacheRadius = 1;
     private const int MaxPreviewPixels = 16_000_000;
-    private readonly Dictionary<int, BitmapSource> _cache = [];
+    private readonly Dictionary<int, TiffPage> _cache = [];
     private readonly object _cacheLock = new();
     private readonly string _path;
     private bool _disposed;
@@ -21,7 +21,7 @@ public sealed class TiffDocument : IDisposable
 
     public int PageCount { get; }
 
-    public Task<BitmapSource> LoadPageAsync(int pageIndex, CancellationToken cancellationToken)
+    public Task<TiffPage> LoadPageAsync(int pageIndex, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         if (pageIndex < 0 || pageIndex >= PageCount)
@@ -74,14 +74,16 @@ public sealed class TiffDocument : IDisposable
         return decoder.Frames.Count;
     }
 
-    private BitmapSource LoadPage(int pageIndex)
+    private TiffPage LoadPage(int pageIndex)
     {
         using var stream = File.Open(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         var frame = decoder.Frames[pageIndex];
+        var originalWidth = frame.PixelWidth;
+        var originalHeight = frame.PixelHeight;
         var source = DownscaleIfHuge(frame);
         source.Freeze();
-        return source;
+        return new TiffPage(source, originalWidth, originalHeight);
     }
 
     private static BitmapSource DownscaleIfHuge(BitmapSource source)

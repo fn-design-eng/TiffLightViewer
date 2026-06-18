@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private readonly List<string> _folderTiffs = [];
     private CancellationTokenSource? _pageLoadCts;
     private TiffDocument? _document;
+    private TiffPage? _currentPage;
     private PreparedTiffFile? _currentFile;
     private int _pageIndex;
     private int _rotation;
@@ -146,6 +147,7 @@ public partial class MainWindow : Window
     {
         if (_document is null || _document.PageCount == 0)
         {
+            _currentPage = null;
             ViewerImage.Source = null;
             EmptyText.Visibility = Visibility.Visible;
             PageText.Text = "-";
@@ -167,7 +169,8 @@ public partial class MainWindow : Window
                 return;
             }
 
-            ViewerImage.Source = page;
+            _currentPage = page;
+            ViewerImage.Source = page.Bitmap;
             PageText.Text = $"{_pageIndex + 1} / {_document.PageCount}";
             ApplyZoom();
             UpdatePanCursor();
@@ -498,14 +501,14 @@ public partial class MainWindow : Window
 
     private void ApplyZoom()
     {
-        if (ViewerImage.Source is BitmapSource source && _fitToWindow)
+        if (_currentPage is not null && _fitToWindow)
         {
-            _fitZoom = CalculateFitZoom(source);
+            _fitZoom = CalculateFitZoom(_currentPage);
             _zoom = _fitZoom;
         }
-        else if (ViewerImage.Source is BitmapSource fitSource)
+        else if (_currentPage is not null)
         {
-            _fitZoom = CalculateFitZoom(fitSource);
+            _fitZoom = CalculateFitZoom(_currentPage);
             _zoom = ClampZoom(_zoom);
         }
 
@@ -517,9 +520,9 @@ public partial class MainWindow : Window
 
     private void RefreshFitZoom()
     {
-        if (ViewerImage.Source is BitmapSource source)
+        if (_currentPage is not null)
         {
-            _fitZoom = CalculateFitZoom(source);
+            _fitZoom = CalculateFitZoom(_currentPage);
         }
     }
 
@@ -531,17 +534,17 @@ public partial class MainWindow : Window
 
     private void UpdateImageHostSize()
     {
-        if (ViewerImage.Source is not BitmapSource source)
+        if (_currentPage is null)
         {
             ImageHost.Width = double.NaN;
             ImageHost.Height = double.NaN;
             return;
         }
 
-        var width = source.Width;
-        var height = source.Height;
-        ViewerImage.Width = source.Width * _zoom;
-        ViewerImage.Height = source.Height * _zoom;
+        var width = _currentPage.OriginalPixelWidth;
+        var height = _currentPage.OriginalPixelHeight;
+        ViewerImage.Width = width * _zoom * _currentPage.PreviewScaleX;
+        ViewerImage.Height = height * _zoom * _currentPage.PreviewScaleY;
         if (_rotation is 90 or 270)
         {
             (width, height) = (height, width);
@@ -549,19 +552,22 @@ public partial class MainWindow : Window
 
         var viewportWidth = Math.Max(1, ImageScrollViewer.ViewportWidth);
         var viewportHeight = Math.Max(1, ImageScrollViewer.ViewportHeight);
-        ImageHost.Width = Math.Max(viewportWidth, width * _zoom);
-        ImageHost.Height = Math.Max(viewportHeight, height * _zoom);
+        ImageHost.Width = Math.Max(viewportWidth, width * _zoom * _currentPage.PreviewScaleX);
+        ImageHost.Height = Math.Max(viewportHeight, height * _zoom * _currentPage.PreviewScaleY);
     }
 
-    private double CalculateFitZoom(BitmapSource source)
+    private double CalculateFitZoom(TiffPage page)
     {
         var viewportWidth = Math.Max(1, ImageScrollViewer.ViewportWidth - 24);
         var viewportHeight = Math.Max(1, ImageScrollViewer.ViewportHeight - 24);
-        var width = source.Width;
-        var height = source.Height;
+        var width = page.OriginalPixelWidth;
+        var height = page.OriginalPixelHeight;
+        var previewScaleX = page.PreviewScaleX;
+        var previewScaleY = page.PreviewScaleY;
         if (_rotation is 90 or 270)
         {
             (width, height) = (height, width);
+            (previewScaleX, previewScaleY) = (previewScaleY, previewScaleX);
         }
 
         if (width <= 0 || height <= 0)
@@ -569,7 +575,12 @@ public partial class MainWindow : Window
             return 1.0;
         }
 
-        return Math.Clamp(Math.Min(viewportWidth / width, viewportHeight / height), 0.05, 1.0);
+        var displayedWidthAtOneHundredPercent = width * previewScaleX;
+        var displayedHeightAtOneHundredPercent = height * previewScaleY;
+        return Math.Clamp(
+            Math.Min(viewportWidth / displayedWidthAtOneHundredPercent, viewportHeight / displayedHeightAtOneHundredPercent),
+            0.05,
+            1.0);
     }
 
     private void SetStatus(string message)
