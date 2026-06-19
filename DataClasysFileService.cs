@@ -6,6 +6,8 @@ namespace TiffLightViewer;
 public sealed class DataClasysFileService : IDisposable
 {
     private const string DefaultClsuClientPath = @"C:\Program Files\DataClasys\UserClient\CLSUClient.exe";
+    private static readonly TimeSpan DecryptReadyTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan DecryptReadyPollInterval = TimeSpan.FromMilliseconds(500);
     private readonly Dictionary<string, PreparedTiffFile> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _sessionRoot;
     private bool _disposed;
@@ -56,11 +58,7 @@ public sealed class DataClasysFileService : IDisposable
         File.Copy(fullPath, workPath, true);
 
         await DecryptAsync(workPath, cancellationToken).ConfigureAwait(false);
-
-        if (!LooksLikePlainTiff(workPath))
-        {
-            throw new InvalidOperationException("DataClasys復号後もTIFFファイルとして認識できませんでした。");
-        }
+        await WaitUntilPlainTiffReadyAsync(workPath, cancellationToken).ConfigureAwait(false);
 
         var decrypted = new PreparedTiffFile(fullPath, workPath, true, "DataClasys復号済み");
         _cache[fullPath] = decrypted;
@@ -146,6 +144,58 @@ public sealed class DataClasysFileService : IDisposable
             var details = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
             throw new InvalidOperationException($"DataClasys復号に失敗しました。終了コード: {process.ExitCode} {details}");
         }
+    }
+
+    private static async Task WaitUntilPlainTiffReadyAsync(string path, CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.StartNew();
+        long? lastSize = null;
+        string? lastSignature = null;
+        var stableCount = 0;
+
+        while (started.Elapsed < DecryptReadyTimeout)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                var fileInfo = new FileInfo(path);
+                if (fileInfo.Exists)
+                {
+                    var currentSize = fileInfo.Length;
+                    var currentSignature = ReadQuickSignature(path);
+                    stableCount = currentSize == lastSize && currentSignature == lastSignature
+                        ? stableCount + 1
+                        : 0;
+
+                    if (stableCount >= 1 && LooksLikePlainTiff(path))
+                    {
+                        return;
+                    }
+
+                    lastSize = currentSize;
+                    lastSignature = currentSignature;
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            await Task.Delay(DecryptReadyPollInterval, cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException("DataClasys復号後、TIFFとして読める状態になるまで待機しましたがタイムアウトしました。");
+    }
+
+    private static string ReadQuickSignature(string path)
+    {
+        Span<byte> buffer = stackalloc byte[64 * 1024];
+        using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var read = stream.Read(buffer);
+        return Convert.ToHexString(buffer[..read]);
     }
 
     public void Dispose()
