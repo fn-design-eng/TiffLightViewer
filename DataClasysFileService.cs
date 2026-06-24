@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Media.Imaging;
+using ImageMagick;
 
 namespace TiffLightViewer;
 
@@ -118,21 +119,38 @@ public sealed class DataClasysFileService : IDisposable
         {
             using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
-            return decoder.Frames.Count > 0;
+            if (decoder.Frames.Count > 0)
+            {
+                return true;
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+        catch (FileFormatException)
+        {
+        }
+
+        try
+        {
+            using var images = new MagickImageCollection(path);
+            return images.Count > 0;
+        }
+        catch (MagickException)
+        {
+            return false;
         }
         catch (IOException)
         {
             return false;
         }
         catch (UnauthorizedAccessException)
-        {
-            return false;
-        }
-        catch (NotSupportedException)
-        {
-            return false;
-        }
-        catch (FileFormatException)
         {
             return false;
         }
@@ -224,7 +242,7 @@ public sealed class DataClasysFileService : IDisposable
                     stableCount = lastStates.TryGetValue(candidatePath, out var lastState) && currentState == lastState ? 1 : 0;
                     lastStates[candidatePath] = currentState;
 
-                    if (stableCount >= 1 && LooksLikePlainTiff(candidatePath))
+                    if (stableCount >= 1 && CanReadAsTiff(candidatePath))
                     {
                         return candidatePath;
                     }
@@ -244,7 +262,7 @@ public sealed class DataClasysFileService : IDisposable
             .Select(path => $"{Path.GetFileName(path)} ({new FileInfo(path).Length} bytes)")
             .ToArray();
         var fileList = files.Length == 0 ? "作業フォルダ内にファイルなし" : string.Join(", ", files);
-        throw new TimeoutException($"DataClasys復号後、TIFFヘッダを持つファイルが見つかりませんでした。作業フォルダ: {fileList}");
+        throw new TimeoutException($"DataClasys復号後、TIFFとして読めるファイルが見つかりませんでした。作業フォルダ: {fileList}");
     }
 
     private static IEnumerable<string> EnumerateDecryptCandidates(string workDir, string preferredPath)
