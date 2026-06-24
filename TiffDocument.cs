@@ -23,10 +23,19 @@ public sealed class TiffDocument : IDisposable
             PageCount = ReadWpfPageCount(path);
             _backend = TiffDecoderBackend.Wpf;
         }
-        catch (Exception) when (DataClasysFileService.LooksLikePlainTiff(path))
+        catch (Exception wpfException)
         {
-            PageCount = ReadMagickPageCount(path);
-            _backend = TiffDecoderBackend.Magick;
+            try
+            {
+                PageCount = ReadMagickPageCount(path);
+                _backend = TiffDecoderBackend.Magick;
+            }
+            catch (Exception magickException)
+            {
+                throw new NotSupportedException(
+                    $"TIFFとして読み込めませんでした。WPF: {wpfException.Message} / Magick.NET: {magickException.Message}",
+                    magickException);
+            }
         }
     }
 
