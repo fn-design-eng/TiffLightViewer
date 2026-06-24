@@ -66,9 +66,10 @@ public sealed class DataClasysFileService : IDisposable
         progressCallback?.Invoke("DataClasys復号コマンドを実行中...");
         await DecryptAsync(workPath, cancellationToken).ConfigureAwait(false);
         progressCallback?.Invoke("DataClasys復号完了待機中...");
-        await WaitUntilPlainTiffReadyAsync(workPath, progressCallback, cancellationToken).ConfigureAwait(false);
+        var displayPath = await WaitUntilPlainTiffReadyAsync(workDir, workPath, progressCallback, cancellationToken)
+            .ConfigureAwait(false);
 
-        var decrypted = new PreparedTiffFile(fullPath, workPath, true, "DataClasys復号済み");
+        var decrypted = new PreparedTiffFile(fullPath, displayPath, true, "DataClasys復号済み");
         _cache[fullPath] = decrypted;
         return decrypted;
     }
@@ -185,14 +186,14 @@ public sealed class DataClasysFileService : IDisposable
         }
     }
 
-    private static async Task WaitUntilPlainTiffReadyAsync(
-        string path,
+    private static async Task<string> WaitUntilPlainTiffReadyAsync(
+        string workDir,
+        string preferredPath,
         Action<string>? progressCallback,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.StartNew();
-        long? lastSize = null;
-        string? lastSignature = null;
+        var lastStates = new Dictionary<string, FileState>(StringComparer.OrdinalIgnoreCase);
         var stableCount = 0;
         var lastProgressSecond = -1;
 
@@ -202,29 +203,31 @@ public sealed class DataClasysFileService : IDisposable
 
             try
             {
-                var fileInfo = new FileInfo(path);
-                if (fileInfo.Exists)
+                var elapsedSecond = (int)started.Elapsed.TotalSeconds;
+                if (elapsedSecond != lastProgressSecond && elapsedSecond % 2 == 0)
                 {
-                    var elapsedSecond = (int)started.Elapsed.TotalSeconds;
-                    if (elapsedSecond != lastProgressSecond && elapsedSecond % 2 == 0)
+                    progressCallback?.Invoke($"DataClasys復号完了待機中... {elapsedSecond}秒");
+                    lastProgressSecond = elapsedSecond;
+                }
+
+                foreach (var candidatePath in EnumerateDecryptCandidates(workDir, preferredPath))
+                {
+                    var fileInfo = new FileInfo(candidatePath);
+                    if (!fileInfo.Exists)
                     {
-                        progressCallback?.Invoke($"DataClasys復号完了待機中... {elapsedSecond}秒");
-                        lastProgressSecond = elapsedSecond;
+                        continue;
                     }
 
                     var currentSize = fileInfo.Length;
-                    var currentSignature = ReadQuickSignature(path);
-                    stableCount = currentSize == lastSize && currentSignature == lastSignature
-                        ? stableCount + 1
-                        : 0;
+                    var currentSignature = ReadQuickSignature(candidatePath);
+                    var currentState = new FileState(currentSize, currentSignature);
+                    stableCount = lastStates.TryGetValue(candidatePath, out var lastState) && currentState == lastState ? 1 : 0;
+                    lastStates[candidatePath] = currentState;
 
-                    if (stableCount >= 1 && CanReadAsTiff(path))
+                    if (stableCount >= 1 && LooksLikePlainTiff(candidatePath))
                     {
-                        return;
+                        return candidatePath;
                     }
-
-                    lastSize = currentSize;
-                    lastSignature = currentSignature;
                 }
             }
             catch (IOException)
@@ -237,7 +240,29 @@ public sealed class DataClasysFileService : IDisposable
             await Task.Delay(DecryptReadyPollInterval, cancellationToken).ConfigureAwait(false);
         }
 
-        throw new TimeoutException("DataClasys復号後、TIFFとして読める状態になるまで待機しましたがタイムアウトしました。");
+        var files = EnumerateDecryptCandidates(workDir, preferredPath)
+            .Select(path => $"{Path.GetFileName(path)} ({new FileInfo(path).Length} bytes)")
+            .ToArray();
+        var fileList = files.Length == 0 ? "作業フォルダ内にファイルなし" : string.Join(", ", files);
+        throw new TimeoutException($"DataClasys復号後、TIFFヘッダを持つファイルが見つかりませんでした。作業フォルダ: {fileList}");
+    }
+
+    private static IEnumerable<string> EnumerateDecryptCandidates(string workDir, string preferredPath)
+    {
+        if (File.Exists(preferredPath))
+        {
+            yield return preferredPath;
+        }
+
+        foreach (var path in Directory.EnumerateFiles(workDir, "*", SearchOption.TopDirectoryOnly)
+                     .OrderByDescending(DataClasysFileService.IsTiffExtension)
+                     .ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!path.Equals(preferredPath, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return path;
+            }
+        }
     }
 
     private static string ReadQuickSignature(string path)
@@ -247,6 +272,8 @@ public sealed class DataClasysFileService : IDisposable
         var read = stream.Read(buffer);
         return Convert.ToHexString(buffer[..read]);
     }
+
+    private sealed record FileState(long Size, string Signature);
 
     public void Dispose()
     {
