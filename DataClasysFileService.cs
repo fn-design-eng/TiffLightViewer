@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Windows.Media.Imaging;
 
 namespace TiffLightViewer;
 
@@ -39,7 +40,7 @@ public sealed class DataClasysFileService : IDisposable
             return cached;
         }
 
-        if (LooksLikePlainTiff(fullPath))
+        if (CanReadAsTiff(fullPath))
         {
             var plain = new PreparedTiffFile(fullPath, fullPath, false, "平文TIFF");
             _cache[fullPath] = plain;
@@ -96,6 +97,37 @@ public sealed class DataClasysFileService : IDisposable
             || header is [0x4D, 0x4D, 0x00, 0x2A]
             || header is [0x49, 0x49, 0x2B, 0x00]
             || header is [0x4D, 0x4D, 0x00, 0x2B];
+    }
+
+    private static bool CanReadAsTiff(string path)
+    {
+        if (LooksLikePlainTiff(path))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            return decoder.Frames.Count > 0;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+        catch (FileFormatException)
+        {
+            return false;
+        }
     }
 
     private static async Task DecryptAsync(string targetPath, CancellationToken cancellationToken)
@@ -168,7 +200,7 @@ public sealed class DataClasysFileService : IDisposable
                         ? stableCount + 1
                         : 0;
 
-                    if (stableCount >= 1 && LooksLikePlainTiff(path))
+                    if (stableCount >= 1 && CanReadAsTiff(path))
                     {
                         return;
                     }
