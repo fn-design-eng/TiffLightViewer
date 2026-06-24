@@ -110,8 +110,35 @@ public partial class MainWindow : Window
             _pageLoadCts?.Dispose();
             _pageLoadCts = null;
 
-            var prepared = await _fileService.PrepareAsync(path);
-            var document = await Task.Run(() => new TiffDocument(prepared.DisplayPath));
+            var prepared = new PreparedTiffFile(Path.GetFullPath(path), Path.GetFullPath(path), false, "平文TIFF");
+            TiffDocument? document = null;
+            Exception? plainOpenException = null;
+            try
+            {
+                SetStatus("通常TIFFとして読み込み中...");
+                document = await Task.Run(() => new TiffDocument(prepared.DisplayPath));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or FileFormatException)
+            {
+                plainOpenException = ex;
+            }
+
+            if (document is null)
+            {
+                SetStatus("DataClasys復号を試行中...");
+                prepared = await _fileService.PrepareAsync(path);
+                try
+                {
+                    document = await Task.Run(() => new TiffDocument(prepared.DisplayPath));
+                }
+                catch (Exception ex) when (plainOpenException is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"通常TIFFとしてもDataClasys復号後としても読み込めませんでした。通常読み込みエラー: {plainOpenException.Message} / 復号後読み込みエラー: {ex.Message}",
+                        ex);
+                }
+            }
+
             if (document.PageCount == 0)
             {
                 throw new InvalidOperationException("表示できるページがありません。");

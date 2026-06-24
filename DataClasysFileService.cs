@@ -78,7 +78,7 @@ public sealed class DataClasysFileService : IDisposable
         Span<byte> header = stackalloc byte[4];
         try
         {
-            using var stream = File.OpenRead(path);
+            using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             if (stream.Read(header) < header.Length)
             {
                 return false;
@@ -108,7 +108,7 @@ public sealed class DataClasysFileService : IDisposable
 
         try
         {
-            using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
             return decoder.Frames.Count > 0;
         }
@@ -225,7 +225,7 @@ public sealed class DataClasysFileService : IDisposable
     private static string ReadQuickSignature(string path)
     {
         Span<byte> buffer = stackalloc byte[64 * 1024];
-        using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var read = stream.Read(buffer);
         return Convert.ToHexString(buffer[..read]);
     }
