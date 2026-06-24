@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using ImageMagick;
 
 namespace TiffLightViewer;
 
@@ -10,13 +11,23 @@ public sealed class TiffDocument : IDisposable
     private const int MaxPreviewPixels = 16_000_000;
     private readonly Dictionary<int, TiffPage> _cache = [];
     private readonly object _cacheLock = new();
+    private readonly TiffDecoderBackend _backend;
     private readonly string _path;
     private bool _disposed;
 
     public TiffDocument(string path)
     {
         _path = path;
-        PageCount = ReadPageCount(path);
+        try
+        {
+            PageCount = ReadWpfPageCount(path);
+            _backend = TiffDecoderBackend.Wpf;
+        }
+        catch (Exception) when (DataClasysFileService.LooksLikePlainTiff(path))
+        {
+            PageCount = ReadMagickPageCount(path);
+            _backend = TiffDecoderBackend.Magick;
+        }
     }
 
     public int PageCount { get; }
@@ -40,7 +51,9 @@ public sealed class TiffDocument : IDisposable
         return Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var page = LoadPage(pageIndex);
+            var page = _backend == TiffDecoderBackend.Magick
+                ? LoadMagickPage(pageIndex)
+                : LoadWpfPage(pageIndex);
             cancellationToken.ThrowIfCancellationRequested();
             lock (_cacheLock)
             {
@@ -67,14 +80,20 @@ public sealed class TiffDocument : IDisposable
         }
     }
 
-    private static int ReadPageCount(string path)
+    private static int ReadWpfPageCount(string path)
     {
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
         return decoder.Frames.Count;
     }
 
-    private TiffPage LoadPage(int pageIndex)
+    private static int ReadMagickPageCount(string path)
+    {
+        using var images = new MagickImageCollection(path);
+        return images.Count;
+    }
+
+    private TiffPage LoadWpfPage(int pageIndex)
     {
         using var stream = File.Open(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var decoder = new TiffBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
@@ -84,6 +103,26 @@ public sealed class TiffDocument : IDisposable
         var source = DownscaleIfHuge(frame);
         source.Freeze();
         return new TiffPage(source, originalWidth, originalHeight);
+    }
+
+    private TiffPage LoadMagickPage(int pageIndex)
+    {
+        using var images = new MagickImageCollection(_path);
+        using var image = images[pageIndex];
+        var originalWidth = (int)Math.Min(int.MaxValue, image.Width);
+        var originalHeight = (int)Math.Min(int.MaxValue, image.Height);
+        DownscaleIfHuge(image);
+
+        var bytes = image.ToByteArray(MagickFormat.Png);
+        using var stream = new MemoryStream(bytes);
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+
+        return new TiffPage(bitmap, originalWidth, originalHeight);
     }
 
     private static BitmapSource DownscaleIfHuge(BitmapSource source)
@@ -98,6 +137,20 @@ public sealed class TiffDocument : IDisposable
         var transformed = new TransformedBitmap(source, new ScaleTransform(scale, scale));
         transformed.Freeze();
         return transformed;
+    }
+
+    private static void DownscaleIfHuge(IMagickImage<byte> image)
+    {
+        var pixelCount = image.Width * (long)image.Height;
+        if (pixelCount <= MaxPreviewPixels)
+        {
+            return;
+        }
+
+        var scale = Math.Sqrt(MaxPreviewPixels / (double)pixelCount);
+        var width = Math.Max(1, (uint)Math.Round(image.Width * scale));
+        var height = Math.Max(1, (uint)Math.Round(image.Height * scale));
+        image.Resize(width, height);
     }
 
     private void PreloadNeighbors(int centerPageIndex)
@@ -119,7 +172,9 @@ public sealed class TiffDocument : IDisposable
 
             try
             {
-                var page = LoadPage(pageIndex);
+                var page = _backend == TiffDecoderBackend.Magick
+                    ? LoadMagickPage(pageIndex)
+                    : LoadWpfPage(pageIndex);
                 lock (_cacheLock)
                 {
                     _cache.TryAdd(pageIndex, page);
@@ -151,4 +206,10 @@ public sealed class TiffDocument : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
+}
+
+internal enum TiffDecoderBackend
+{
+    Wpf,
+    Magick,
 }
