@@ -20,7 +20,11 @@ public sealed class DataClasysFileService : IDisposable
         Directory.CreateDirectory(_sessionRoot);
     }
 
-    public async Task<PreparedTiffFile> PrepareAsync(string originalPath, CancellationToken cancellationToken = default)
+    public async Task<PreparedTiffFile> PrepareAsync(
+        string originalPath,
+        bool skipPlainTiffProbe = false,
+        Action<string>? progressCallback = null,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
 
@@ -40,7 +44,7 @@ public sealed class DataClasysFileService : IDisposable
             return cached;
         }
 
-        if (CanReadAsTiff(fullPath))
+        if (!skipPlainTiffProbe && CanReadAsTiff(fullPath))
         {
             var plain = new PreparedTiffFile(fullPath, fullPath, false, "平文TIFF");
             _cache[fullPath] = plain;
@@ -56,10 +60,13 @@ public sealed class DataClasysFileService : IDisposable
         var workDir = Path.Combine(_sessionRoot, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDir);
         var workPath = Path.Combine(workDir, Path.GetFileName(fullPath));
+        progressCallback?.Invoke("DataClasys復号用にローカルコピー中...");
         File.Copy(fullPath, workPath, true);
 
+        progressCallback?.Invoke("DataClasys復号コマンドを実行中...");
         await DecryptAsync(workPath, cancellationToken).ConfigureAwait(false);
-        await WaitUntilPlainTiffReadyAsync(workPath, cancellationToken).ConfigureAwait(false);
+        progressCallback?.Invoke("DataClasys復号完了待機中...");
+        await WaitUntilPlainTiffReadyAsync(workPath, progressCallback, cancellationToken).ConfigureAwait(false);
 
         var decrypted = new PreparedTiffFile(fullPath, workPath, true, "DataClasys復号済み");
         _cache[fullPath] = decrypted;
@@ -178,12 +185,16 @@ public sealed class DataClasysFileService : IDisposable
         }
     }
 
-    private static async Task WaitUntilPlainTiffReadyAsync(string path, CancellationToken cancellationToken)
+    private static async Task WaitUntilPlainTiffReadyAsync(
+        string path,
+        Action<string>? progressCallback,
+        CancellationToken cancellationToken)
     {
         var started = Stopwatch.StartNew();
         long? lastSize = null;
         string? lastSignature = null;
         var stableCount = 0;
+        var lastProgressSecond = -1;
 
         while (started.Elapsed < DecryptReadyTimeout)
         {
@@ -194,6 +205,13 @@ public sealed class DataClasysFileService : IDisposable
                 var fileInfo = new FileInfo(path);
                 if (fileInfo.Exists)
                 {
+                    var elapsedSecond = (int)started.Elapsed.TotalSeconds;
+                    if (elapsedSecond != lastProgressSecond && elapsedSecond % 2 == 0)
+                    {
+                        progressCallback?.Invoke($"DataClasys復号完了待機中... {elapsedSecond}秒");
+                        lastProgressSecond = elapsedSecond;
+                    }
+
                     var currentSize = fileInfo.Length;
                     var currentSignature = ReadQuickSignature(path);
                     stableCount = currentSize == lastSize && currentSignature == lastSignature

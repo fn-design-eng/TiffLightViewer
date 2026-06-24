@@ -126,7 +126,10 @@ public partial class MainWindow : Window
             if (document is null)
             {
                 SetStatus("DataClasys復号を試行中...");
-                prepared = await _fileService.PrepareAsync(path);
+                prepared = await _fileService.PrepareAsync(
+                    path,
+                    skipPlainTiffProbe: true,
+                    progressCallback: message => Dispatcher.Invoke(() => SetStatus(message)));
                 try
                 {
                     document = await Task.Run(() => new TiffDocument(prepared.DisplayPath));
