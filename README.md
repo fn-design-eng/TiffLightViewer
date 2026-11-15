@@ -17,6 +17,8 @@ DataClasysで暗号化されたTIFFファイルは、表示用にローカル一
 
 ## 開発
 
+.NET 10 SDK が必要です。
+
 ```powershell
 dotnet build
 dotnet run -- "C:\path\to\sample.tif"
@@ -33,7 +35,7 @@ dotnet run -- "C:\path\to\sample.tif"
 
 ## 公開版の使い方
 
-1. Windows x64 に [.NET Desktop Runtime 8 (x64)](https://dotnet.microsoft.com/download/dotnet/8.0) をインストールします。
+1. Windows x64 に [.NET Desktop Runtime 10 (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) をインストールします。
 2. 公開ZIPを展開し、そのフォルダで PowerShell から `.\Install-TiffDecoder.ps1` を一度実行します。初回のみインターネット接続が必要です。デコーダーは NuGet.org から取得し、配布時のハッシュと照合します。
 3. 同じフォルダの `TiffLightViewer.exe` を起動します。
 
@@ -59,5 +61,5 @@ dotnet publish -p:PublishProfile=SelfContained
 dotnet publish -p:PublishProfile=FrameworkDependent
 ```
 
-- .NET内包版: `bin\Release\net8.0-windows\win-x64\publish-self-contained\`
-- .NET Desktop Runtime 8 必須版: `bin\Release\net8.0-windows\win-x64\publish-framework-dependent\`
+- .NET内包版: `bin\Release\net10.0-windows\win-x64\publish-self-contained\`
+- .NET Desktop Runtime 10 必須版: `bin\Release\net10.0-windows\win-x64\publish-framework-dependent\`

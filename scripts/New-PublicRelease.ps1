@@ -8,7 +8,9 @@ $archive = Join-Path $stage 'archive'
 New-Item -ItemType Directory -Path $archive -Force | Out-Null
 
 try {
-    dotnet publish (Join-Path $root 'TiffLightViewer.csproj') -p:PublishProfile=FrameworkDependent -p:PublishSingleFile=false -p:DebugType=None -o $publish
+    $project = Join-Path $root 'TiffLightViewer.csproj'
+    $publishProperties = @('-p:PublishProfile=FrameworkDependent', '-p:PublishSingleFile=false', '-p:DebugType=None')
+    dotnet publish $project @publishProperties -o $publish
     if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 
     $appFiles = @('TiffLightViewer.exe', 'TiffLightViewer.dll', 'TiffLightViewer.deps.json', 'TiffLightViewer.runtimeconfig.json')
@@ -43,16 +45,30 @@ try {
     }
     $files | ConvertTo-Json -AsArray | Set-Content (Join-Path $archive 'decoder-files.json') -Encoding utf8
 
-    $assets = Get-Content (Join-Path $root 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
-    $hostPack = $assets.project.frameworks.Values.downloadDependencies |
-        Where-Object { $_.name -eq 'Microsoft.NETCore.App.Host.win-x64' } | Select-Object -First 1
-    if (-not $hostPack -or $hostPack.version -notmatch '^\[([^,]+), \1\]$') {
+    $hostInfo = dotnet msbuild $project -nologo @publishProperties -target:_GetAppHostPaths -getProperty:AppHostSourcePath -getItem:ResolvedAppHostPack
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the .NET apphost.' }
+    $hostInfo = $hostInfo | Out-String | ConvertFrom-Json
+    $hostPath = $hostInfo.Properties.AppHostSourcePath
+    $hostPack = @($hostInfo.Items.ResolvedAppHostPack | Where-Object { $_.Path -eq $hostPath })
+    if ($hostPack.Count -ne 1 -or -not (Test-Path -LiteralPath $hostPath -PathType Leaf)) {
         throw 'Cannot identify the exact .NET apphost pack.'
     }
-    $packPath = "microsoft.netcore.app.host.win-x64/$($Matches[1])"
-    $hostDir = $assets.packageFolders.Keys | ForEach-Object { Join-Path $_ $packPath } |
-        Where-Object { Test-Path (Join-Path $_ 'LICENSE.TXT') } | Select-Object -First 1
-    if (-not $hostDir) { throw 'Missing .NET apphost license.' }
+    $hostDir = $hostPack[0].PackageDirectory
+    if (-not (Test-Path (Join-Path $hostDir 'LICENSE.TXT')) -or
+        -not (Test-Path (Join-Path $hostDir 'THIRD-PARTY-NOTICES.TXT'))) {
+        # SDK-installed packs can omit the license files present in the NuGet package.
+        $version = (Split-Path -Leaf $hostDir).ToLowerInvariant()
+        if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Unexpected .NET apphost version.' }
+        $id = 'microsoft.netcore.app.host.win-x64'
+        $hostZip = Join-Path $stage 'apphost.zip'
+        $hostDir = Join-Path $stage 'apphost'
+        Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/$id/$version/$id.$version.nupkg" -OutFile $hostZip
+        Expand-Archive -LiteralPath $hostZip -DestinationPath $hostDir
+        $downloadedHost = Join-Path $hostDir $hostPack[0].PathInPackage
+        if ((Get-FileHash -LiteralPath $hostPath).Hash -ne (Get-FileHash -LiteralPath $downloadedHost).Hash) {
+            throw 'The NuGet apphost does not match the SDK apphost.'
+        }
+    }
 
     Copy-Item (Join-Path $hostDir 'LICENSE.TXT') (Join-Path $archive 'DOTNET-APPHOST-LICENSE.txt')
     Copy-Item (Join-Path $hostDir 'THIRD-PARTY-NOTICES.TXT') (Join-Path $archive 'DOTNET-APPHOST-THIRD-PARTY-NOTICES.txt')
