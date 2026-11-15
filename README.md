@@ -36,7 +36,7 @@ dotnet run -- "C:\path\to\sample.tif"
 ## 公開版の使い方
 
 1. Windows x64 に [.NET Desktop Runtime 10 (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) をインストールします。
-2. 公開ZIPを展開し、そのフォルダで PowerShell から `.\Install-TiffDecoder.ps1` を一度実行します。初回のみインターネット接続が必要です。デコーダーは NuGet.org から取得し、配布時のハッシュと照合します。
+2. 公開ZIPを展開し、中の `TiffLightViewer` フォルダで PowerShell から `.\Install-TiffDecoder.ps1` を一度実行します。デコーダーは NuGet.org から取得し、配布時のハッシュと照合します。この手順にはインターネット接続が必要です。
 3. 同じフォルダの `TiffLightViewer.exe` を起動します。
 
 スクリプトの実行が既定で無効な場合は、配布元を確認したうえで、組織のポリシーで許可されていれば次の手順を使えます。管理者権限は不要で、実行ポリシーの指定は起動したプロセス限りです。
@@ -47,6 +47,8 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\Install-TiffDeco
 ```
 
 DataClasysは公開ZIPに含まれません。復号には利用者のPCにインストール済みのDataClasysクライアントと、対象ファイルの復号権限が必要です。
+
+更新時はアプリを終了し、新しいZIP内の `TiffLightViewer` フォルダを、既存の同名フォルダがある場所へコピーして上書きします。デコーダーが更新されたリリースでは、上書き後に `.\Install-TiffDecoder.ps1` を再実行してください。
 
 ## 公開版の作成
 

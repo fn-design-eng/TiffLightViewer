@@ -4,7 +4,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $root 'dist'
 $stage = Join-Path $dist ([IO.Path]::GetRandomFileName())
 $publish = Join-Path $stage 'publish'
-$archive = Join-Path $stage 'archive'
+$archive = Join-Path $stage 'TiffLightViewer'
 New-Item -ItemType Directory -Path $archive -Force | Out-Null
 
 try {
@@ -76,7 +76,7 @@ try {
         Copy-Item (Join-Path $root $name) $archive
     }
     $zip = Join-Path $dist 'TiffLightViewer-win-x64.zip'
-    Compress-Archive -Path (Join-Path $archive '*') -DestinationPath $zip -Force
+    Compress-Archive -LiteralPath $archive -DestinationPath $zip -Force
     Write-Output $zip
 }
 finally {
