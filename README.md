@@ -2,15 +2,12 @@
 
 Windows向けの軽量TIFFビューアです。
 
-DataClasysで暗号化されたTIFFファイルは、表示用にローカル一時領域へ復号して読み込みます。ペイントで開く場合は、復号済み一時ファイルではなく元ファイルのパスを渡します。
-
 ## 主な機能
 
 - `.tif` / `.tiff` の表示
 - マルチページTIFFのページ移動
 - 同一フォルダ内の前後TIFF移動
 - 拡大、縮小、実寸、ウィンドウに合わせる、回転表示
-- DataClasys暗号化TIFFの表示用復号
 - 元ファイルパスを指定したペイント起動
 - ウィンドウへのTIFFファイルのドラッグ&ドロップ
 - 重いTIFF向けのページ遅延読み込みと前後ページキャッシュ
@@ -47,8 +44,6 @@ dotnet run -- "C:\path\to\sample.tif"
 Unblock-File -LiteralPath .\Install-TiffDecoder.ps1
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\Install-TiffDecoder.ps1
 ```
-
-DataClasysは公開ZIPに含まれません。復号には利用者のPCにインストール済みのDataClasysクライアントと、対象ファイルの復号権限が必要です。
 
 更新時はアプリを終了し、新しいZIP内の `TiffLightViewer` フォルダを、既存の同名フォルダがある場所へコピーして上書きします。デコーダーが更新されたリリースでは、上書き後に `.\Install-TiffDecoder.ps1` を再実行してください。
 
