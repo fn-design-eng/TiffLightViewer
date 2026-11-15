@@ -169,12 +169,23 @@
                 Background="{DynamicResource ToolbarBackgroundBrush}"
                 BorderBrush="{DynamicResource ChromeBorderBrush}"
                 BorderThickness="0,1,0,0">
-            <TextBlock x:Name="StatusText"
-                       Margin="8,0"
-                       Text="準備完了"
-                       FontSize="12"
-                       Foreground="{DynamicResource MutedTextBrush}"
-                       TextTrimming="CharacterEllipsis" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusText"
+                           Margin="8,0"
+                           Text="準備完了"
+                           FontSize="12"
+                           Foreground="{DynamicResource MutedTextBrush}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="VersionText"
+                           Grid.Column="1"
+                           Margin="8,0"
+                           FontSize="12"
+                           Foreground="{DynamicResource MutedTextBrush}" />
+            </Grid>
         </Border>
     </Grid>
 </Window>

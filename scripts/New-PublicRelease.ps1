@@ -75,7 +75,11 @@ try {
     foreach ($name in @('LICENSE', 'README.md', 'THIRD-PARTY-NOTICES.md', 'scripts/Install-TiffDecoder.ps1')) {
         Copy-Item (Join-Path $root $name) $archive
     }
-    $zip = Join-Path $dist 'TiffLightViewer-win-x64.zip'
+    $version = (Get-Item -LiteralPath (Join-Path $archive 'TiffLightViewer.exe')).VersionInfo.ProductVersion
+    if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$') {
+        throw 'Unexpected application product version.'
+    }
+    $zip = Join-Path $dist "TiffLightViewer-v$version-win-x64.zip"
     Compress-Archive -LiteralPath $archive -DestinationPath $zip -Force
     Write-Output $zip
 }

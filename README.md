@@ -39,6 +39,8 @@ dotnet run -- "C:\path\to\sample.tif"
 2. 公開ZIPを展開し、中の `TiffLightViewer` フォルダで PowerShell から `.\Install-TiffDecoder.ps1` を一度実行します。デコーダーは NuGet.org から取得し、配布時のハッシュと照合します。この手順にはインターネット接続が必要です。
 3. 同じフォルダの `TiffLightViewer.exe` を起動します。
 
+アプリのバージョンは画面の右下、またはEXEのプロパティの「詳細」から確認できます。
+
 スクリプトの実行が既定で無効な場合は、配布元を確認したうえで、組織のポリシーで許可されていれば次の手順を使えます。管理者権限は不要で、実行ポリシーの指定は起動したプロセス限りです。
 
 ```powershell
@@ -52,7 +54,9 @@ DataClasysは公開ZIPに含まれません。復号には利用者のPCにイ�
 
 ## 公開版の作成
 
-リポジトリ直下から PowerShell 7 で `.\scripts\New-PublicRelease.ps1` を実行すると、`dist/TiffLightViewer-win-x64.zip` が作られます。公開するバイナリはこのZIPです。アプリのライセンスは [MIT](LICENSE)、第三者コンポーネントは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照してください。
+リリース時は `TiffLightViewer.csproj` の `Version` を更新します。リポジトリ直下から PowerShell 7 で `.\scripts\New-PublicRelease.ps1` を実行すると、`dist/TiffLightViewer-v1.0.0-win-x64.zip` のように、バージョンを含む公開用ZIPが作られます。アプリのライセンスは [MIT](LICENSE)、第三者コンポーネントは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照してください。
+
+上書き更新のため、ZIP内のフォルダ名 `TiffLightViewer` と実行ファイル名 `TiffLightViewer.exe` はバージョンが変わっても固定です。
 
 ## ローカル利用向けの発行
 
