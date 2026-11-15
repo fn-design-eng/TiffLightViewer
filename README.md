@@ -31,7 +31,28 @@ dotnet run -- "C:\path\to\sample.tif"
 - 下部中央ツールバー: ズーム、前後ファイル移動、フィット/実寸、ページ移動、左右回転、ペイント起動
 - 表示テーマ: Windowsのアプリテーマ設定に追従
 
-## 発行
+## 公開版の使い方
+
+1. Windows x64 に [.NET Desktop Runtime 8 (x64)](https://dotnet.microsoft.com/download/dotnet/8.0) をインストールします。
+2. 公開ZIPを展開し、そのフォルダで PowerShell から `.\Install-TiffDecoder.ps1` を一度実行します。初回のみインターネット接続が必要です。デコーダーは NuGet.org から取得し、配布時のハッシュと照合します。
+3. 同じフォルダの `TiffLightViewer.exe` を起動します。
+
+スクリプトの実行が既定で無効な場合は、配布元を確認したうえで、組織のポリシーで許可されていれば次の手順を使えます。管理者権限は不要で、実行ポリシーの指定は起動したプロセス限りです。
+
+```powershell
+Unblock-File -LiteralPath .\Install-TiffDecoder.ps1
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\Install-TiffDecoder.ps1
+```
+
+DataClasysは公開ZIPに含まれません。復号には利用者のPCにインストール済みのDataClasysクライアントと、対象ファイルの復号権限が必要です。
+
+## 公開版の作成
+
+リポジトリ直下から PowerShell 7 で `.\scripts\New-PublicRelease.ps1` を実行すると、`dist/TiffLightViewer-win-x64.zip` が作られます。公開するバイナリはこのZIPです。アプリのライセンスは [MIT](LICENSE)、第三者コンポーネントは [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照してください。
+
+## ローカル利用向けの発行
+
+次の出力には外部ライブラリが同梱されます。公開ZIPの代わりには使用しないでください。
 
 ```powershell
 dotnet publish -p:PublishProfile=SelfContained
