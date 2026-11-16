@@ -2,6 +2,10 @@
 
 Windows向けの軽量TIFFビューアです。
 
+**[最新版をダウンロード（Windows x64 / ZIP）](https://github.com/fn-design-eng/TiffLightViewer/releases/latest)**
+
+リリースページの「Assets」から `TiffLightViewer-v…-win-x64.zip` を選んでください。
+
 ## 主な機能
 
 - `.tif` / `.tiff` の表示
